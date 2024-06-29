@@ -8,21 +8,30 @@
 
 <body>
     <h1 id="header"></h1>
+    <div id="message" style="display: none;"></div>
     <div id="checkboxes"></div>
     <script>
         const header = document.getElementById("header");
+        const message = document.getElementById("message");
         const checkboxesElement = document.getElementById("checkboxes");
         const checkboxes = [];
+
+        let clearMessageTimeout;
         let heartbeatInterval;
 
-        const checkboxSize = 15;
+        const checkboxSize = 12;
         const checkboxGap = 2;
+
+        let dragging = true;
+        let leftClickHeld = false;
 
         (async function setup() {
             const ws = new WebSocket("/ws");
             ws.onopen = () => console.log("Connected to WebSocket");
             ws.onmessage = msg => {
                 const json = JSON.parse(msg.data);
+
+                if (json.failure) setMessage(json.failureMessage, 2500, json.failure);
 
                 if (json.type == "hello") {
                     heartbeatInterval = setInterval(() => ws.send(JSON.stringify({ type: "heartbeat" })), json.data.heartbeatInterval);
@@ -39,7 +48,8 @@
                     for (let i = 0; i < checkboxesData.length; i++) {
                         const checkbox = document.createElement("input");
                         checkbox.type = "checkbox";
-                        checkbox.onchange = () => { checkbox.checked = !checkbox.checked; ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked } })) };
+                        checkbox.onchange = () => { checkbox.checked = !checkbox.checked; ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked ? 1 : 0 } })) };
+                        if (dragging) checkbox.onmouseenter = () => leftClickHeld ? ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked ? 1 : 0 } })) : null;
                         checkbox.checked = checkboxesData.checkboxes[i] || 0;
                         checkboxesElement.appendChild(checkbox);
                         checkboxes.push(checkbox);
@@ -56,11 +66,50 @@
                 setTimeout(() => setup(), 5 * 1000);
             };
         })();
+
+        if (dragging) {
+            document.body.onmousedown = e => e.button == 0 ? leftClickHeld = true : null;
+            document.body.onmouseup = e => e.button == 0 ? leftClickHeld = false : null;
+        }
+
+        function setMessage(text, clearAfter, error) {
+            message.innerHTML = text;
+            message.style.display = "";
+            error ? message.classList.add("error") : message.classList.remove("error");
+            if (clearAfter) {
+                clearTimeout(clearMessageTimeout);
+                clearMessageTimeout = setTimeout(() => clearMessage(), clearAfter);
+            }
+        }
+
+        function clearMessage() {
+            message.innerHTML = "";
+            message.style.display = "none";
+        }
     </script>
     <style>
-        #header {
+        #header, #message {
             font-family: Arial;
             text-align: center;
+        }
+
+        #message {
+            position: fixed;
+            left: 50vw;
+            top: 50vh;
+            width: min(100vw, 1000px);
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            min-height: 1em;
+            padding: 1em;
+            font-size: 24pt;
+            border-radius: 1em;
+            transform: translate(-50%, -50%);
+            box-sizing: border-box;
+        }
+
+        #message.error {
+            color: red;
         }
 
         #checkboxes {

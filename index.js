@@ -50,7 +50,7 @@ Bun.serve({
             if (requestsByIp[ws.remoteAddress]) {
                 if (requestsByIp[ws.remoteAddress] >= config.rateLimit.maxRequests) {
                     // If hit rate limit, send message and close
-                    return ws.send(JSON.stringify({ type: "rate-limited", data: { message: `You are being rate limited, try again in ${Math.ceil(config.rateLimit.resetTimeout / 1000)} seconds!` } }));
+                    return ws.send(JSON.stringify({ type: "rate-limited", failure: true, failureMessage: `You are being rate limited, try again in ${Math.ceil(config.rateLimit.decrementInterval / 1000)} seconds!` }));
                 }
                 // Increment requests
                 requestsByIp[ws.remoteAddress]++;
@@ -64,12 +64,14 @@ Bun.serve({
                 clearTimeout(ws.heartbeatTimeout);
                 ws.heartbeatTimeout = setTimeout(() => ws.close(), config.heartbeatInterval + config.heartbeatIntervalDiff);
             } else
-                if (json.type == "set-checkbox") {
-                    if (!json.data?.checkbox || json.data?.state == undefined) return;
-                    updateCheckbox(json.data.checkbox, json.data.state ? 1 : 0);
-                }
+            if (json.type == "set-checkbox") {
+                if (!json.data?.checkbox || json.data?.state == undefined) return;
+                updateCheckbox(json.data.checkbox, json.data.state ? 1 : 0);
+            }
         },
         close(ws) {
+            clearInterval(ws.heartbeatInterval);
+            clearTimeout(ws.heartbeatTimeout);
             const clientIndex = clients.findIndex(i => i == ws);
             if (clientIndex != -1) clients.splice(clientIndex, 1);
         }
