@@ -1,7 +1,7 @@
 import config from "./config.json";
 import Bun from "bun";
 
-const rateLimits = {};
+const requestsByIp = {};
 const clients = [];
 
 const checkboxesFile = Bun.file("checkboxes.json");
@@ -26,54 +26,48 @@ Bun.serve({
 
     async fetch(req, server) {
         // Constant responses
-        const badRequest = new Response(JSON.stringify({ success: false, message: "Bad Request" }), { status: 400, headers: { "Content-Type": "application/json" } });
-        const notFound = new Response(null, { status: 301, headers: { Location: "/" } });
-        const rateLimit = new Response(JSON.stringify({ success: false, message: `You are being rate limited, try again in ${Math.ceil(config.rateLimit.resetTimeout / 1000)} seconds!` }), { status: 429, headers: { "Content-Type": "application/json" } });
 
-        const ip = server.requestIP(req);
         const method = req.method;
         const url = new URL(req.url);
-        let json;
-        if (req.body) json = await req.json().catch();
 
         // /
         if (url.pathname == "/" && method == "GET") return new Response(Bun.file("index.html"));
-        // /checkboxes
-        if (url.pathname == "/checkboxes" && method == "GET") return new Response(JSON.stringify(checkboxesData), { headers: { "Content-Type": "application/json" } });
-        
-        // Apply rate limit here
-        if (rateLimits[ip.address]) { if (rateLimits[ip.address].requests >= config.rateLimit.maxRequests) return rateLimit; rateLimits[ip.address].requests++; clearTimeout(rateLimits[ip.address].timeout) } else rateLimits[ip.address] = { requests: 1 };
-        rateLimits[ip.address].timeout = setTimeout(() => delete rateLimits[ip.address], config.rateLimit.resetTimeout);
-        
-        // set-checkbox
-        if (url.pathname == "/set-checkbox" && method == "POST") {
-            if (json?.state != undefined && typeof json?.checkbox == "number" && json?.checkbox < config.checkboxes && json?.checkbox >= 0) {
-                updateCheckbox(json.checkbox, json.state);
-                return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
-            } else return badRequest;
-        };
         // /ws
         if (url.pathname == "/ws") return server.upgrade(req) ? null : error;
 
         // 404
-        return notFound;
+        return new Response(null, { status: 301, headers: { Location: "/" } });
     },
     websocket: {
         open(ws) {
-            ws.send(JSON.stringify({ type: "hello", data: { heartbeatInterval: config.heartbeatInterval } })); // Send hello event with heartbeat interval
+            ws.send(JSON.stringify({ type: "hello", data: { heartbeatInterval: config.heartbeatInterval, checkboxesData } })); // Send hello event with heartbeat interval
             ws.heartbeatSendInterval = setInterval(() => ws.send(JSON.stringify({ type: "heartbeat" })), config.heartbeatInterval); // Create interval to send heartbeats
             ws.heartbeatTimeout = setTimeout(() => ws.close(), config.heartbeatInterval + config.heartbeatIntervalDiff); // Create timeout to close if no heartbeats received
             clients.push(ws); // Push client to array
         },
         message(ws, message) {
+            // Apply rate limit here
+            if (requestsByIp[ws.remoteAddress]) {
+                if (requestsByIp[ws.remoteAddress] >= config.rateLimit.maxRequests) {
+                    // If hit rate limit, send message and close
+                    return ws.send(JSON.stringify({ type: "rate-limited", data: { message: `You are being rate limited, try again in ${Math.ceil(config.rateLimit.resetTimeout / 1000)} seconds!` } }));
+                }
+                // Increment requests
+                requestsByIp[ws.remoteAddress]++;
+            } else requestsByIp[ws.remoteAddress] = 1;
+
             let json;
             try { json = JSON.parse(message) } catch (err) { };
             if (!json) return;
 
-            if (json?.type == "heartbeat") {
+            if (json.type == "heartbeat") {
                 clearTimeout(ws.heartbeatTimeout);
                 ws.heartbeatTimeout = setTimeout(() => ws.close(), config.heartbeatInterval + config.heartbeatIntervalDiff);
-            }
+            } else
+                if (json.type == "set-checkbox") {
+                    if (!json.data?.checkbox || json.data?.state == undefined) return;
+                    updateCheckbox(json.data.checkbox, json.data.state ? 1 : 0);
+                }
         },
         close(ws) {
             const clientIndex = clients.findIndex(i => i == ws);
@@ -93,3 +87,11 @@ function updateCheckbox(checkbox, state) {
 setInterval(() => {
     Bun.write(checkboxesFile, JSON.stringify(checkboxesData));
 }, config.saveInterval);
+
+// Decrement requests in rate limits
+setInterval(() => {
+    for (const i in requestsByIp) {
+        requestsByIp[i]--;
+        if (requestsByIp[i] <= 0) delete requestsByIp[i];
+    }
+}, config.rateLimit.decrementInterval);

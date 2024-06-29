@@ -1,61 +1,85 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body>
-        <h1 id="header"></h1>
-        <div id="checkboxes"></div>
-        <script>
-            const header = document.getElementById("header");
-            const checkboxesElement = document.getElementById("checkboxes");
-            const checkboxes = [];
-            let heartbeatInterval;
 
-            (async function setup() {
-                const ws = new WebSocket("/ws");
-                ws.onopen = () => console.log("Connected to WebSocket");
-                ws.onmessage = msg => {
-                    const json = JSON.parse(msg.data);
-                    
-                    if (json.type == "hello") {
-                        heartbeatInterval = setInterval(() => ws.send(JSON.stringify({ type: "heartbeat" })), json.data.heartbeatInterval);
-                    } else
-                    if (json.type == "checkbox-update") {
-                        checkboxes[json.data.checkbox].checked = json.data.state;
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+    <h1 id="header"></h1>
+    <div id="checkboxes"></div>
+    <script>
+        const header = document.getElementById("header");
+        const checkboxesElement = document.getElementById("checkboxes");
+        const checkboxes = [];
+        let heartbeatInterval;
+
+        const checkboxSize = 15;
+        const checkboxGap = 2;
+
+        (async function setup() {
+            const ws = new WebSocket("/ws");
+            ws.onopen = () => console.log("Connected to WebSocket");
+            ws.onmessage = msg => {
+                const json = JSON.parse(msg.data);
+
+                if (json.type == "hello") {
+                    heartbeatInterval = setInterval(() => ws.send(JSON.stringify({ type: "heartbeat" })), json.data.heartbeatInterval);
+                    checkboxesData = json.data.checkboxesData;
+
+                    header.innerHTML = `${checkboxesData.length} Checkboxes!`;
+                    document.title = `${checkboxesData.length} Checkboxes!`;
+
+                    checkboxesElement.innerHTML = "";
+                    checkboxes.splice(0, checkboxes.length);
+                    checkboxesElement.style.width = `${Math.sqrt(checkboxesData.length * (checkboxSize + checkboxGap) * (checkboxSize + checkboxGap))}px`;
+                    checkboxesElement.style.gap = `${checkboxGap}px`;
+                    for (let i = 0; i < checkboxesData.length; i++) {
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.onchange = () => { checkbox.checked = !checkbox.checked; ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked } })) };
+                        checkbox.checked = checkboxesData.checkboxes[i] || 0;
+                        checkbox.style.width = `${checkboxSize}px`;
+                        checkbox.style.height = `${checkboxSize}px`;
+                        checkboxesElement.appendChild(checkbox);
+                        checkboxes.push(checkbox);
                     }
+                } else
+                if (json.type == "checkbox-update") {
+                    console.log(`Updating checkbox ${json.data.checkbox} to ${json.data.state ? "checked" : "unchecked"}`);
+                    checkboxes[json.data.checkbox].checked = json.data.state ? 1 : 0;
                 }
-                ws.onclose = () => {
-                    console.log("WebSocket closed, reconnecting in 5 seconds...");
-                    clearInterval(heartbeatInterval);
-                    setTimeout(() => setup(), 5 * 1000);
-                };
-
-                const checkboxesData = await fetch("/checkboxes").then(i => i.json());
-
-                header.innerHTML = `${checkboxesData.length} Checkboxes!`;
-                document.title = `${checkboxesData.length} Checkboxes!`;
-                
-                checkboxesElement.innerHTML = "";
-                checkboxes.splice(0, checkboxes.length);
-                for (let i = 0; i < checkboxesData.length; i++) {
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.onchange = () => fetch("/set-checkbox", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ checkbox: i, state: checkbox.checked }) });
-                    checkbox.checked = checkboxesData.checkboxes[i] || 0;
-                    checkboxesElement.appendChild(checkbox);
-                    checkboxes.push(checkbox);
-                }
-            })();
-        </script>
-        <style>
-            body {
-                font-family: Arial;
             }
-            #header {
-                text-align: center;
-            }
-        </style>
-    </body>
+            ws.onclose = () => {
+                console.log("WebSocket closed, reconnecting in 5 seconds...");
+                clearInterval(heartbeatInterval);
+                setTimeout(() => setup(), 5 * 1000);
+            };
+        })();
+    </script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial;
+        }
+
+        #header {
+            text-align: center;
+        }
+
+        #checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        #checkboxes input[type="checkbox"] {
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</body>
+
 </html>
