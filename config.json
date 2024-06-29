@@ -5,7 +5,7 @@
     "heartbeatInterval": 15000,
     "heartbeatIntervalDiff": 5000,
     "rateLimit": {
-        "maxRequests": 50,
+        "maxRequests": 100,
         "decrementInterval": 1000
     }
 }
