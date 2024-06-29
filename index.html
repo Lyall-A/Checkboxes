@@ -49,7 +49,7 @@
                         const checkbox = document.createElement("input");
                         checkbox.type = "checkbox";
                         checkbox.onchange = () => { checkbox.checked = !checkbox.checked; ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked ? 1 : 0 } })) };
-                        if (dragging) checkbox.onmouseenter = () => leftClickHeld ? ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked ? 1 : 0 } })) : null;
+                        if (dragging) checkbox.onmouseleave = () => leftClickHeld ? ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked ? 1 : 0 } })) : null;
                         checkbox.checked = checkboxesData.checkboxes[i] || 0;
                         checkboxesElement.appendChild(checkbox);
                         checkboxes.push(checkbox);
