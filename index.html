@@ -34,14 +34,13 @@
                     checkboxesElement.innerHTML = "";
                     checkboxes.splice(0, checkboxes.length);
                     checkboxesElement.style.width = `${Math.sqrt(checkboxesData.length * (checkboxSize + checkboxGap) * (checkboxSize + checkboxGap))}px`;
-                    checkboxesElement.style.gap = `${checkboxGap}px`;
+                    checkboxesElement.style.setProperty("--gap", `${checkboxGap}px`);
+                    checkboxesElement.style.setProperty("--size", `${checkboxSize}px`);
                     for (let i = 0; i < checkboxesData.length; i++) {
                         const checkbox = document.createElement("input");
                         checkbox.type = "checkbox";
                         checkbox.onchange = () => { checkbox.checked = !checkbox.checked; ws.send(JSON.stringify({ type: "set-checkbox", data: { checkbox: i, state: !checkbox.checked } })) };
                         checkbox.checked = checkboxesData.checkboxes[i] || 0;
-                        checkbox.style.width = `${checkboxSize}px`;
-                        checkbox.style.height = `${checkboxSize}px`;
                         checkboxesElement.appendChild(checkbox);
                         checkboxes.push(checkbox);
                     }
@@ -59,25 +58,21 @@
         })();
     </script>
     <style>
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            font-family: Arial;
-        }
-
         #header {
+            font-family: Arial;
             text-align: center;
         }
 
         #checkboxes {
-            display: flex;
-            flex-wrap: wrap;
+            font-size: 0;
+            margin: auto;
         }
 
         #checkboxes input[type="checkbox"] {
-            margin: 0;
             padding: 0;
+            margin: calc(var(--gap) / 2);
+            width: var(--size);
+            height: var(--size);
         }
     </style>
 </body>
